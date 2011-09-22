@@ -15,17 +15,35 @@ public:
 	
 							SimpleTask (Logger *l, char *name): fLogger (l), fName (name) {}
 
-	virtual	ULong			GetSizeOf ();
+	virtual	ULong			GetSizeOf () { return sizeof (SimpleTask); }
 	virtual long 			TaskConstructor ();
 	virtual void 			TaskDestructor ();
 	virtual void 			TaskMain ();
-
+	
+	static TObjectId		TaskPort (char *name);
 };
 
-ULong SimpleTask::GetSizeOf ()
+class SenderTask: public SimpleTask
 {
-	return sizeof (SimpleTask);
-}
+public:
+	TUPort					fReceiverPort;
+	
+							SenderTask (Logger *l, char *name): SimpleTask (l, name) {}
+
+	virtual void 			TaskMain ();
+	virtual	ULong			GetSizeOf () { return sizeof (SenderTask); }
+	
+	void					SendSimpleMessage ();
+};
+
+class ReceiverTask: public SimpleTask
+{
+public:
+							ReceiverTask (Logger *l, char *name): SimpleTask (l, name) {}
+
+	virtual void 			TaskMain ();
+	virtual	ULong			GetSizeOf () { return sizeof (ReceiverTask); }
+};
 
 long SimpleTask::TaskConstructor ()
 {
@@ -49,13 +67,18 @@ void SimpleTask::TaskDestructor ()
 
 void SimpleTask::TaskMain ()
 {
+	fLogger->Log (0, "SimpleTask::TaskMain %s\n", fName);
+}
+
+void ReceiverTask::TaskMain ()
+{
 	UByte message[MAX_MESSAGE];
 	ULong n = MAX_MESSAGE;
 	ULong type = 0;
 	TUMsgToken token;
 	long r;
 	
-	fLogger->Log (0, "SimpleTask::TaskMain %s\n", fName);
+	fLogger->Log (0, "ReceiverTask::TaskMain %s\n", fName);
 	while (true) {
 		r = fPort.Receive (&n, message, MAX_MESSAGE, &token, &type);
 		if (r == noErr) {
@@ -66,7 +89,7 @@ void SimpleTask::TaskMain ()
 	}
 }
 
-TObjectId TaskPort (char *name)
+TObjectId SimpleTask::TaskPort (char *name)
 {
 	TUNameServer nameServer;
 	ULong id;
@@ -76,21 +99,46 @@ TObjectId TaskPort (char *name)
 	return id;
 }
 
+void SenderTask::SendSimpleMessage ()
+{
+	UByte message[10];
+	long r;
+	
+	memcpy (message, "0123456789", 10);
+	fLogger->Log (0, ">>> Test: Send message to %d\n", fReceiverPort.fId);
+	r = fReceiverPort.Send ((void *) message, sizeof (message));
+	fLogger->Log (0, ">>> Test: Message sent, r: %d\n", r);
+}
+
+void SenderTask::TaskMain ()
+{
+	int i;
+	
+	fReceiverPort = TUPort (TaskPort ("Receiver"));
+	fLogger->Log (0, "SenderTask::TaskMain %s, receiver port: %d\n", fName, fReceiverPort.fId);
+	for (i = 0; i < 10; i++) {
+		SendSimpleMessage ();
+	}
+}
+
 extern "C" Ref MCreateTasks (RefArg rcvr)
 {
-	SimpleTask *task;
+	SenderTask *sender;
+	ReceiverTask *receiver;
 	Logger *logger;
 
 	logger = new Logger ();
 	logger->Initialize ();
 	logger->Main ();
 
-	task = new SimpleTask (logger, "TaskA");
+	sender = new SenderTask (logger, "Sender");
+	receiver = new ReceiverTask (logger, "Receiver");
 
 	logger->Log (0, "------------------------------------------------------------------------\n");
-	logger->Log (0, "MCreateTasks (task: %s logger: %08x)\n", task->fName, logger);
+	logger->Log (0, "MCreateTasks (sender: %s, receiver: %s)\n", sender->fName, receiver->fName);
 
-	SetFrameSlot (rcvr, SYM (task), MakeInt ((ULong) task));
+	SetFrameSlot (rcvr, SYM (sender), MakeInt ((ULong) sender));
+	SetFrameSlot (rcvr, SYM (receiver), MakeInt ((ULong) receiver));
 	SetFrameSlot (rcvr, SYM (logger), MakeInt ((ULong) logger));
 
 	return NILREF;
@@ -98,54 +146,36 @@ extern "C" Ref MCreateTasks (RefArg rcvr)
 
 extern "C" Ref MStartTasks (RefArg rcvr)
 {
-	SimpleTask* task = (SimpleTask *) RefToInt (GetFrameSlot(rcvr, SYM (task)));
+	SimpleTask* sender = (SimpleTask *) RefToInt (GetFrameSlot(rcvr, SYM (sender)));
+	SimpleTask* receiver = (SimpleTask *) RefToInt (GetFrameSlot(rcvr, SYM (receiver)));
 	Logger* logger = (Logger *) RefToInt (GetFrameSlot(rcvr, SYM (logger)));
-	logger->Log (0, "MStartTasks (task: %08x logger: %08x)\n", task, logger);
+	logger->Log (0, "MStartTasks\n");
 
-	task->StartTask ();
+	receiver->StartTask ();
+	sender->StartTask ();
 
 	return NILREF;
-}
-
-void Test_SendSimpleMessage (Logger *logger)
-{
-	UByte message[10];
-	long r;
-	TUPort taskPort (TaskPort ("TaskA"));
-	
-	logger->Log (0, ">>> Test: Send message to %d\n", taskPort.fId);
-	memcpy (message, "0123456789", 10);
-	r = taskPort.Send ((void *) message, sizeof (message));
-	logger->Log (0, ">>> Test: Message sent, r: %d\n", r);
 }
 
 extern "C" Ref MRunTests (RefArg rcvr)
 {
 	Logger* logger = (Logger *) RefToInt (GetFrameSlot(rcvr, SYM (logger)));
-	int i;
 
 	logger->Log (0, "MRunTests\n");
-
-	for (i = 0; i < 10; i++) {
-		Test_SendSimpleMessage (logger);
-	}
 
 	return NILREF;
 }
 
 extern "C" Ref MStopTasks (RefArg rcvr)
 {
-	long r;
-	SimpleTask* task = (SimpleTask *) RefToInt (GetFrameSlot(rcvr, SYM (task)));
 	Logger* logger = (Logger *) RefToInt (GetFrameSlot(rcvr, SYM (logger)));
 	logger->Log (0, "MStopTasks\n");
 
-	TUTask t (task->GetChildTaskId ());
-	t.DestroyObject ();
-	delete task;
+	delete (SenderTask *) RefToInt (GetFrameSlot(rcvr, SYM (sender)));
+	delete (ReceiverTask *) RefToInt (GetFrameSlot(rcvr, SYM (receiver)));
 	logger->Log (0, "\n");
 
-	Sleep (3 * kSeconds);
+	Sleep (2 * kSeconds);
 	logger->Close ();
 	delete logger;
 
