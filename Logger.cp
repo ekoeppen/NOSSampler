@@ -274,4 +274,25 @@ void Logger::Log (Long logLevel, char *format, ...)
 	}
 }
 
+void Logger::LogHex (Long logLevel, void *data, int length)
+{
+	int i, j;
+	char buffer[80];
+	
+	for (i = 0; i < length; i++) {
+		if (i % 16 == 0) {
+			sprintf (buffer, "%04x ", i);
+			j = 0;
+		}
+		sprintf (buffer + 5 + j * 3, "%02x ", ((char *) data)[i]);
+		j++;
+	}
+}
+
+void Logger::LogAsyncMessage (Long logLevel, TUAsyncMessage *message)
+{
+	Log (logLevel, "Message: %08x\n", message);
+	Log (logLevel, "  MsgId: %d, ReplyMemId: %d\n", message->GetMsgId (), message->GetReplyMemId ());
+}
+
 #endif

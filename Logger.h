@@ -6,6 +6,7 @@ void hammer_log (int desiredLevel, int currentLevel, char *format, ...);
 class TSerialChip;
 class TCircleBuf;
 class TULockingSemaphore;
+class TUAsyncMessage;
 
 // ================================================================================
 // ¥ Logger
@@ -41,6 +42,8 @@ public:
 	void 					Output (UByte*, ULong);
 
 	void 					Log (Long logLevel, char *format, ...);
+	void					LogHex (Long logLevel, void *data, int length);
+	void					LogAsyncMessage (Long logLevel, TUAsyncMessage *message);
 };
 
 class TLogFunction

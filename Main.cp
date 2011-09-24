@@ -20,6 +20,8 @@ public:
 	virtual void 			TaskDestructor ();
 	virtual void 			TaskMain ();
 	
+	void					LogAysncMessage (TUAsyncMessage *message);
+
 	static TObjectId		TaskPort (char *name);
 };
 
@@ -27,13 +29,16 @@ class SenderTask: public SimpleTask
 {
 public:
 	TUPort					fReceiverPort;
+	TUAsyncMessage			fAsyncMessage;
 	
 							SenderTask (Logger *l, char *name): SimpleTask (l, name) {}
 
 	virtual void 			TaskMain ();
 	virtual	ULong			GetSizeOf () { return sizeof (SenderTask); }
 	
-	void					SendSimpleMessage ();
+	void					SendSimpleMessage (ULong type);
+	void					SendAsyncMessage (ULong type);
+	void					SendAndModifyAsyncMessage (ULong type);
 };
 
 class ReceiverTask: public SimpleTask
@@ -77,12 +82,20 @@ void ReceiverTask::TaskMain ()
 	ULong type = 0;
 	TUMsgToken token;
 	long r;
+	Boolean done = false;
 	
 	fLogger->Log (0, "ReceiverTask::TaskMain %s\n", fName);
-	while (true) {
+	while (!done) {
 		r = fPort.Receive (&n, message, MAX_MESSAGE, &token, &type);
 		if (r == noErr) {
 			fLogger->Log (0, "*** SimpleTask: Message received, len: %d, type: %08x\n", n, type);
+			fLogger->Log (0, "    [%s]\n", message);
+			if (type == 0x00000001) {
+				done = true;
+			} else if (type == 0x00000002) {
+				Sleep (1500 * kMilliseconds);
+				fLogger->Log (0, "    Modified message: [%s]\n", message);
+			}
 		} else {
 			fLogger->Log (0, "*** SimpleTask: Error %d while waiting for message\n", r);
 		}
@@ -99,15 +112,42 @@ TObjectId SimpleTask::TaskPort (char *name)
 	return id;
 }
 
-void SenderTask::SendSimpleMessage ()
+void SenderTask::SendSimpleMessage (ULong type)
 {
-	UByte message[10];
+	UByte message[11];
 	long r;
 	
-	memcpy (message, "0123456789", 10);
+	memcpy (message, "0123456789", 10); message[10] = 0;
 	fLogger->Log (0, ">>> Test: Send message to %d\n", fReceiverPort.fId);
-	r = fReceiverPort.Send ((void *) message, sizeof (message));
+	r = fReceiverPort.Send ((void *) message, sizeof (message), kNoTimeout, type);
 	fLogger->Log (0, ">>> Test: Message sent, r: %d\n", r);
+}
+
+void SenderTask::SendAsyncMessage (ULong type)
+{
+	UByte message[11];
+	long r;
+	
+	memcpy (message, "9876543210", 10); message[10] = 0;
+	fLogger->Log (0, ">>> Test: Send aysnc message to %d\n", fReceiverPort.fId);
+	fLogger->LogAsyncMessage (0, &fAsyncMessage);
+	r = fReceiverPort.Send (&fAsyncMessage, (void *) message, sizeof (message), kNoTimeout, nil, type);
+	fLogger->Log (0, ">>> Test: Async message sent, r: %d\n", r);
+}
+
+void SenderTask::SendAndModifyAsyncMessage (ULong type)
+{
+	UByte message[11];
+	long r;
+	
+	memcpy (message, "9876543210", 10); message[10] = 0;
+	fLogger->Log (0, ">>> Test: Send aysnc message to %d\n", fReceiverPort.fId);
+	fLogger->LogAsyncMessage (0, &fAsyncMessage);
+	r = fReceiverPort.Send (&fAsyncMessage, (void *) message, sizeof (message), kNoTimeout, nil, type);
+	fLogger->Log (0, ">>> Test: Async message sent, r: %d\n", r);
+	Sleep (1000 * kMilliseconds);
+	memcpy (message, "0000000000", 10); message[10] = 0;
+	fLogger->Log (0, ">>> Test: Async message modified\n");
 }
 
 void SenderTask::TaskMain ()
@@ -115,10 +155,16 @@ void SenderTask::TaskMain ()
 	int i;
 	
 	fReceiverPort = TUPort (TaskPort ("Receiver"));
+	fAsyncMessage.Init ();
 	fLogger->Log (0, "SenderTask::TaskMain %s, receiver port: %d\n", fName, fReceiverPort.fId);
-	for (i = 0; i < 10; i++) {
-		SendSimpleMessage ();
-	}
+
+	SendSimpleMessage (0x08000000);
+	SendAsyncMessage (0x00000003);
+	SendAndModifyAsyncMessage (0x00000002);
+
+	Sleep (5 * kSeconds);
+
+	SendSimpleMessage (0x00000001);
 }
 
 extern "C" Ref MCreateTasks (RefArg rcvr)
@@ -153,15 +199,6 @@ extern "C" Ref MStartTasks (RefArg rcvr)
 
 	receiver->StartTask ();
 	sender->StartTask ();
-
-	return NILREF;
-}
-
-extern "C" Ref MRunTests (RefArg rcvr)
-{
-	Logger* logger = (Logger *) RefToInt (GetFrameSlot(rcvr, SYM (logger)));
-
-	logger->Log (0, "MRunTests\n");
 
 	return NILREF;
 }
