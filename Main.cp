@@ -75,6 +75,16 @@ void SimpleTask::TaskMain ()
 	fLogger->Log (0, "SimpleTask::TaskMain %s\n", fName);
 }
 
+TObjectId SimpleTask::TaskPort (char *name)
+{
+	TUNameServer nameServer;
+	ULong id;
+	ULong spec;
+
+	nameServer.Lookup (name, "TUPort", &id, &spec);
+	return id;
+}
+
 void ReceiverTask::TaskMain ()
 {
 	UByte message[MAX_MESSAGE];
@@ -100,16 +110,6 @@ void ReceiverTask::TaskMain ()
 			fLogger->Log (0, "*** SimpleTask: Error %d while waiting for message\n", r);
 		}
 	}
-}
-
-TObjectId SimpleTask::TaskPort (char *name)
-{
-	TUNameServer nameServer;
-	ULong id;
-	ULong spec;
-
-	nameServer.Lookup (name, "TUPort", &id, &spec);
-	return id;
 }
 
 void SenderTask::SendSimpleMessage (ULong type)
