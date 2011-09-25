@@ -50,6 +50,15 @@ public:
 	virtual	ULong			GetSizeOf () { return sizeof (ReceiverTask); }
 };
 
+class AsyncReceiverTask: public SimpleTask
+{
+public:
+							AsyncReceiverTask (Logger *l, char *name): SimpleTask (l, name) {}
+
+	virtual void 			TaskMain ();
+	virtual	ULong			GetSizeOf () { return sizeof (AsyncReceiverTask); }
+};
+
 long SimpleTask::TaskConstructor ()
 {
 	TUNameServer nameServer;
@@ -112,6 +121,31 @@ void ReceiverTask::TaskMain ()
 	}
 }
 
+void AsyncReceiverTask::TaskMain ()
+{
+	TUAsyncMessage *message;
+	long r;
+	Boolean done = false;
+	
+	fLogger->Log (0, "AsyncReceiverTask::TaskMain %s\n", fName);
+	while (!done) {
+		message = new TUAsyncMessage ();
+		message->Init (false);
+		while (!fPort.IsMsgAvailable ()) {
+			Sleep (250 * kMilliseconds);
+		}
+		r = fPort.Receive (message);
+		if (r == noErr) {
+			fLogger->Log (0, "*** AsyncReceiverTask: Message received\n");
+			fLogger->LogAsyncMessage (0, message);
+		} else {
+			fLogger->Log (0, "*** AsyncReceiverTask: Error %d while waiting for message\n", r);
+			done = true;
+		}
+		delete message;
+	}
+}
+
 void SenderTask::SendSimpleMessage (ULong type)
 {
 	UByte message[11];
@@ -155,22 +189,22 @@ void SenderTask::TaskMain ()
 	int i;
 	
 	fReceiverPort = TUPort (TaskPort ("Receiver"));
-	fAsyncMessage.Init ();
+	fAsyncMessage.Init (false);
 	fLogger->Log (0, "SenderTask::TaskMain %s, receiver port: %d\n", fName, fReceiverPort.fId);
 
-	SendSimpleMessage (0x08000000);
+	// SendSimpleMessage (0x08000000);
 	SendAsyncMessage (0x00000003);
 	SendAndModifyAsyncMessage (0x00000002);
 
 	Sleep (5 * kSeconds);
 
-	SendSimpleMessage (0x00000001);
+	// SendSimpleMessage (0x00000001);
 }
 
 extern "C" Ref MCreateTasks (RefArg rcvr)
 {
-	SenderTask *sender;
-	ReceiverTask *receiver;
+	SimpleTask *sender;
+	SimpleTask *receiver;
 	Logger *logger;
 
 	logger = new Logger ();
@@ -178,7 +212,7 @@ extern "C" Ref MCreateTasks (RefArg rcvr)
 	logger->Main ();
 
 	sender = new SenderTask (logger, "Sender");
-	receiver = new ReceiverTask (logger, "Receiver");
+	receiver = new AsyncReceiverTask (logger, "Receiver");
 
 	logger->Log (0, "------------------------------------------------------------------------\n");
 	logger->Log (0, "MCreateTasks (sender: %s, receiver: %s)\n", sender->fName, receiver->fName);
@@ -208,8 +242,8 @@ extern "C" Ref MStopTasks (RefArg rcvr)
 	Logger* logger = (Logger *) RefToInt (GetFrameSlot(rcvr, SYM (logger)));
 	logger->Log (0, "MStopTasks\n");
 
-	delete (SenderTask *) RefToInt (GetFrameSlot(rcvr, SYM (sender)));
-	delete (ReceiverTask *) RefToInt (GetFrameSlot(rcvr, SYM (receiver)));
+	delete (SimpleTask *) RefToInt (GetFrameSlot(rcvr, SYM (sender)));
+	delete (SimpleTask *) RefToInt (GetFrameSlot(rcvr, SYM (receiver)));
 	logger->Log (0, "\n");
 
 	Sleep (2 * kSeconds);
