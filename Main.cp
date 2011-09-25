@@ -108,11 +108,13 @@ void ReceiverTask::TaskMain ()
 		r = fPort.Receive (&n, message, MAX_MESSAGE, &token, &type);
 		if (r == noErr) {
 			fLogger->Log (0, "*** SimpleTask: Message received, len: %d, type: %08x\n", n, type);
+			fLogger->LogMsgToken (0, &token);
 			fLogger->Log (0, "    [%s]\n", message);
 			if (type == 0x00000001) {
 				done = true;
 			} else if (type == 0x00000002) {
 				Sleep (1500 * kMilliseconds);
+				fLogger->LogMsgToken (0, &token);
 				fLogger->Log (0, "    Modified message: [%s]\n", message);
 			}
 		} else {
@@ -175,7 +177,7 @@ void SenderTask::SendAndModifyAsyncMessage (ULong type)
 	long r;
 	
 	memcpy (message, "9876543210", 10); message[10] = 0;
-	fLogger->Log (0, ">>> Test: Send aysnc message to %d\n", fReceiverPort.fId);
+	fLogger->Log (0, ">>> Test: Send aysnc and modify message to %d\n", fReceiverPort.fId);
 	fLogger->LogAsyncMessage (0, &fAsyncMessage);
 	r = fReceiverPort.Send (&fAsyncMessage, (void *) message, sizeof (message), kNoTimeout, nil, type);
 	fLogger->Log (0, ">>> Test: Async message sent, r: %d\n", r);
@@ -192,13 +194,13 @@ void SenderTask::TaskMain ()
 	fAsyncMessage.Init (false);
 	fLogger->Log (0, "SenderTask::TaskMain %s, receiver port: %d\n", fName, fReceiverPort.fId);
 
-	// SendSimpleMessage (0x08000000);
+	SendSimpleMessage (0x08000000);
 	SendAsyncMessage (0x00000003);
 	SendAndModifyAsyncMessage (0x00000002);
 
 	Sleep (5 * kSeconds);
 
-	// SendSimpleMessage (0x00000001);
+	SendSimpleMessage (0x00000001);
 }
 
 extern "C" Ref MCreateTasks (RefArg rcvr)
@@ -212,7 +214,7 @@ extern "C" Ref MCreateTasks (RefArg rcvr)
 	logger->Main ();
 
 	sender = new SenderTask (logger, "Sender");
-	receiver = new AsyncReceiverTask (logger, "Receiver");
+	receiver = new ReceiverTask (logger, "Receiver");
 
 	logger->Log (0, "------------------------------------------------------------------------\n");
 	logger->Log (0, "MCreateTasks (sender: %s, receiver: %s)\n", sender->fName, receiver->fName);
