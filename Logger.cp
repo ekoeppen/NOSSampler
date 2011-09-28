@@ -291,14 +291,14 @@ void Logger::LogHex (Long logLevel, void *data, int length)
 
 void Logger::LogAsyncMessage (Long logLevel, TUAsyncMessage *message)
 {
-	Log (logLevel, "    Message: %08x\n", message);
-	Log (logLevel, "      MsgId: %d, ReplyMemId: %d\n", message->GetMsgId (), message->GetReplyMemId ());
+	Log (logLevel, "    Message: %08x", message);
+	Log (logLevel, " MsgId: %d, ReplyMemId: %d\n", message->GetMsgId (), message->GetReplyMemId ());
 }
 
 void Logger::LogMsgToken (Long logLevel, TUMsgToken *token)
 {
-	Log (logLevel, "    Token: %08x\n", token);
-	Log (logLevel, "      MsgId: %d, ReplyId: %d", token->GetMsgId (), token->GetReplyId ());
+	Log (logLevel, "    Token: %08x", token);
+	Log (logLevel, " MsgId: %d, ReplyId: %d", token->GetMsgId (), token->GetReplyId ());
 	Log (logLevel, " ReceiverMsgId: %d, Signature: %d\n", token->GetReceiverMsgId (), token->GetSignature ());
 }
 
