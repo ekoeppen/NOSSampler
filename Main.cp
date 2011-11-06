@@ -1,5 +1,6 @@
 #include <HALOptions.h>
 #include <NewtonScript.h>
+#include "CircleBuf.h"
 #include "UserTasks.h"
 #include "Logger.h"
 
@@ -301,3 +302,117 @@ extern "C" Ref MStopTasks (RefArg rcvr)
 	return NILREF;
 }
 
+void LogBuffer (Logger *logger, TCircleBuf *buffer)
+{
+	ULong n;
+	NewtonErr r;
+	int i;
+	char *b = (char *) buffer;
+
+	logger->Log (0, "Buffer: %p", buffer->fBuffer);
+	logger->Log (0, " Size: %d", buffer->fSize);
+	logger->Log (0, " BufferSpace: %d", buffer->BufferSpace ());
+	logger->Log (0, " BufferCount: %d\n", buffer->BufferCount ());
+	logger->Log (0, "MarkerSpace: %d", buffer->MarkerSpace ());
+	logger->Log (0, " MarkerCount: %d", buffer->MarkerCount ());
+
+	r = buffer->PeekNextEOMIndex (&n);
+	logger->Log (0, " PeekNextEOMIndex (%d): %d\n", r, n);
+
+	for (i = 0; i < sizeof (TCircleBuf); i++, b++) {
+		logger->Log (0, "%02x ", *b);
+		if (((i + 1) % 16) == 0) logger->Log (0, "\n");
+	}
+	logger->Log (0, "\n");
+}
+
+extern "C" Ref MTestCircleBuffer (RefArg rcvr)
+{
+	Logger *logger;
+	TCircleBuf *buffer;
+	NewtonErr r;
+	ULong n, m;
+	UByte data[11];
+
+	logger = new Logger ();
+	logger->Initialize ();
+	logger->Main ();
+
+	logger->Log (0, "------------------------------------------------------------------------\n");
+	logger->Log (0, "MTestCircleBuffer\n");
+
+	buffer = new TCircleBuf ();
+	buffer->Allocate(512, 0, 0, 0);
+	LogBuffer (logger, buffer);
+
+	logger->Log (0, "------------------------------------------------------------------------\n");
+	n = 8;
+	r = buffer->CopyIn ((UByte *) "01234567", &n, false, 0);
+	logger->Log (0, "CopyIn (%d): %d\n", r, n);
+	LogBuffer (logger, buffer);
+
+	logger->Log (0, "------------------------------------------------------------------------\n");
+	n = 8;
+	r = buffer->CopyIn ((UByte *) "01234567", &n, false, 0);
+	logger->Log (0, "CopyIn (%d): %d\n", r, n);
+	LogBuffer (logger, buffer);
+
+	logger->Log (0, "------------------------------------------------------------------------\n");
+	n = 9;
+	m = 10;
+	memset (data, 0, sizeof (data));
+	r = buffer->CopyOut (data, &n, &m);
+	logger->Log (0, "CopyOut (%d): %d, %d\n", r, n, m);
+	LogBuffer (logger, buffer);
+	logger->Log (0, "%s\n", data);
+
+	logger->Log (0, "------------------------------------------------------------------------\n");
+	n = 10;
+	m = 10;
+	memset (data, 0, sizeof (data));
+	r = buffer->CopyOut (data, &n, &m);
+	logger->Log (0, "CopyOut (%d): %d, %d\n", r, n, m);
+	LogBuffer (logger, buffer);
+	logger->Log (0, "%s\n", data);
+
+	logger->Log (0, "------------------------------------------------------------------------\n");
+	r = buffer->PutEOM (n);
+	logger->Log (0, "PutEOM (%d)\n", r);
+	LogBuffer (logger, buffer);
+
+/*	logger->Log (0, "------------------------------------------------------------------------\n");
+	r = buffer->PutEOMMark (0, 0);
+	logger->Log (0, "PutEOMMark (%d)\n", r);
+	LogBuffer (logger, buffer);
+	logger->Log (0, "------------------------------------------------------------------------\n");
+	r = buffer->PutEOMMark (1, 1);
+	logger->Log (0, "PutEOMMark (%d)\n", r);
+	r = buffer->PutEOMMark (2, 3);
+	logger->Log (0, "PutEOMMark (%d)\n", r);
+	LogBuffer (logger, buffer);
+	logger->Log (0, "------------------------------------------------------------------------\n");
+	r = buffer->PutEOM (4);
+	logger->Log (0, "PutEOM (%d)\n", r);
+	LogBuffer (logger, buffer);
+	logger->Log (0, "------------------------------------------------------------------------\n");
+	r = buffer->PutNextEOM (5);
+	logger->Log (0, "PutNextEOM (%d)\n", r);
+	LogBuffer (logger, buffer);*/
+
+	buffer->Deallocate ();
+	delete buffer;
+
+	logger->Log (0, "------------------------------------------------------------------------\n");
+	buffer = new TCircleBuf ();
+	buffer->Allocate(256);
+	LogBuffer (logger, buffer);
+	buffer->Deallocate ();
+	delete buffer;
+	
+	logger->Log (0, "------------------------------------------------------------------------\n");
+	Sleep (3 * kSeconds);
+	logger->Close ();
+	delete logger;
+
+	return NILREF;
+}
